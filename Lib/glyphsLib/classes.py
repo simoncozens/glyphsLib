@@ -378,8 +378,6 @@ class GSBase:
             value = getattr(self, key)
         klass = self._classesForName[key]
         default = self._defaultsForName.get(key, None)
-        if not value:
-            return False
         if isinstance(value, (list, glyphsLib.classes.Proxy, str)) and len(value) == 0:
             return False
         if default is not None:
@@ -430,10 +428,10 @@ class GSBase:
         return value
 
     def _marshal_to_dict(self, value, formatVersion):
-        if hasattr(value, "to_dict"):
-            value = value.to_dict(formatVersion=formatVersion)
-        elif hasattr(value, "to_value"):
+        if hasattr(value, "to_value"):
             value = value.to_value(formatVersion=formatVersion)
+        elif hasattr(value, "to_dict"):
+            value = value.to_dict(formatVersion=formatVersion)
         return value
 
     @classmethod
@@ -468,7 +466,7 @@ class GSBase:
         return target
 
     def to_dict(self, formatVersion=3):
-        d = {}
+        d = OrderedDict({})
         if hasattr(self, "_keyOrder"):
             keys = self._keyOrder
         elif hasattr(self, "_classesForName"):
@@ -488,13 +486,16 @@ class GSBase:
             if key_in_class[0] == "_":
                 # Go through reader instead
                 key_in_class = key_in_class[1:]
-            value = getattr(self, key_in_class)
-            if isinstance(value, (list, tuple, glyphsLib.classes.Proxy)) and key_in_class != "userData":
-                value = [self._marshal_to_dict(v, formatVersion) for v in value]
+            if hasattr(self, "%s_writer" % key_in_class):
+                getattr(self, "%s_writer" % key_in_class)(d, value, formatVersion)
             else:
-                value = self._marshal_to_dict(value, formatVersion)
-            if value:
-                d[key_in_plist] = value
+                value = getattr(self, key_in_class)
+                if isinstance(value, (list, tuple, glyphsLib.classes.Proxy)) and key_in_class != "userData":
+                    value = [self._marshal_to_dict(v, formatVersion) for v in value]
+                else:
+                    value = self._marshal_to_dict(value, formatVersion)
+                if value is not None and value != {}:
+                    d[key_in_plist] = value
         return d
 
 
@@ -1422,11 +1423,6 @@ class GSCustomParameter(GSBase):
 
     value = property(getValue, setValue)
 
-    def to_value(self, formatVersion=2):
-        from glyphsLib.parser.v3 import dict_to_plist
-
-        return dict_to_plist(self.to_dict())
-
 
 class GSAlignmentZone(GSBase):
     __slots__ = ("position", "size")
@@ -1459,11 +1455,10 @@ class GSAlignmentZone(GSBase):
     def __lt__(self, other):
         return (self.position, self.size) < (other.position, other.size)
 
-    def to_value(self):
+    def to_value(self, formatVersion=2):
         return '"{{{}, {}}}"'.format(
             floatToString5(self.position), floatToString5(self.size)
         )
-
 
 class GSGuide(GSBase):
     __slots__ = (
@@ -1807,7 +1802,7 @@ class GSNode(GSBase):
     def parent(self):
         return self._parent
 
-    def to_value(self):
+    def to_value(self, formatVersion=2):
         content = self.type.upper()
         if self.smooth:
             content += " SMOOTH"
@@ -1817,7 +1812,7 @@ class GSNode(GSBase):
             writer.writeDict(self._userData)
             content += " "
             content += self._encode_dict_as_string(string.getvalue())
-        return '"{} {} {}"'.format(
+        return '{} {} {}'.format(
             floatToString5(self.position[0]), floatToString5(self.position[1]), content
         )
 
@@ -2550,7 +2545,7 @@ class GSHint(GSBase):
         "name": str,
         "settings": dict,
     }
-    _plistToClass2 = _plistToClass3 = { 
+    _plistToClass2 = _plistToClass3 = {
         "origin": "_origin",
         "target": "_target",
         "other1": "_other1",
@@ -2594,6 +2589,7 @@ class GSHint(GSBase):
         self.type = ""
         self._parent = None
         self._targetNode = None
+        self._target = None
 
     def shouldWriteValueForKey(self, key, formatVersion=3):
         if key == "settings" and (self.settings is None or len(self.settings) == 0):
@@ -2752,7 +2748,7 @@ class GSFeature(GSBase):
         self.notes = ""
 
     def shouldWriteValueForKey(self, key, formatVersion=3):
-        if key == "code":
+        if key == "_code":
             return True
         return super().shouldWriteValueForKey(key, formatVersion)
 
@@ -3645,6 +3641,12 @@ class GSGlyph(GSBase):
             GSLayer.from_dict(layer, target=g, formatVersion=formatVersion)
             self._layers[g._layerId] = g
 
+    def unicodes_writer(self, target, value, formatVersion):
+        if formatVersion == 3:
+            target["unicode"] = self.unicodes
+        else:
+            target["unicode"] = ",".join(self.unicodes)
+
     def __repr__(self):
         return '<GSGlyph "{}" with {} layers>'.format(self.name, len(self.layers))
 
@@ -3732,7 +3734,8 @@ class GSGlyph(GSBase):
 
 
 class GSFont(GSBase):
-    __slots__ = (
+    __slots__ = _keyOrder = (
+        "appVersion",
         "DisplayStrings",
         "_classes",
         "_customParameters",
@@ -3745,7 +3748,6 @@ class GSFont(GSBase):
         "_masters",
         "_userData",
         "_versionMinor",
-        "appVersion",
         "copyright",
         "date",
         "designer",
@@ -3765,8 +3767,8 @@ class GSFont(GSBase):
     )
 
     _classesForName = {
-        "appVersion": str,
         "DisplayStrings": str,
+        "appVersion": str,
         "_classes": GSClass,
         "copyright": str,
         "_customParameters": GSCustomParameter,

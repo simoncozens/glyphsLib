@@ -1656,29 +1656,29 @@ class GSNodeFromFileTest(GSObjectsTestCase):
 
 
 class GSCustomParameterTest(unittest.TestCase):
-    def test_to_value_string(self):
+    def test_to_dict_string(self):
         test_string = "Some Value"
         param = GSCustomParameter("New Parameter", test_string)
         self.assertEqual(
-            param.to_value(), '{\nname = "New Parameter";\nvalue = "Some Value";\n}'
+            param.to_dict(), {"name": "New Parameter", "value": "Some Value" }
         )
 
-    def test_to_value_list(self):
+    def test_to_dict_list(self):
         test_list = [1, 2.5, {"key1": "value1"}]
         param = GSCustomParameter("New Parameter", test_list)
         self.assertEqual(
-            param.to_value(),
-            '{\nname = "New Parameter";\nvalue = (\n1,\n2.5,'
-            "\n{\nkey1 = value1;\n}\n);\n}",
+            param.to_dict(),
+            { "name": "New Parameter", "value": (1, 2.5,
+             { "key1": "value1" } ) }
         )
 
-    def test_to_value_dict(self):
+    def test_to_dict_dict(self):
         test_dict = {"key1": "value1", "key2": "value2"}
         param = GSCustomParameter("New Parameter", test_dict)
         self.assertEqual(
-            param.to_value(),
-            '{\nname = "New Parameter";\nvalue = {\nkey1 = value1;'
-            "\nkey2 = value2;\n};\n}",
+            param.to_dict(),
+            { "name": "New Parameter", "value": { "key1": "value1",
+            "key2": "value2" } }
         )
 
 

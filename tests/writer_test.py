@@ -1002,15 +1002,11 @@ class WriterTest(unittest.TestCase, test_helpers.AssertLinesEqual):
         node.name = "top-left corner"
         # userData
         node.userData["rememberToDownloadARealRemindersApp"] = True
-        self.assertWritesValue(
-            node,
-            '"10 30 CURVE SMOOTH {name = \\"top-left corner\\";\\n\
-rememberToDownloadARealRemindersApp = 1;}"',
-        )
+        assert node.to_value() == '10 30 CURVE SMOOTH {name = \\"top-left corner\\";\\nrememberToDownloadARealRemindersApp = 1;}'
 
         # Write floating point coordinates
         node = classes.GSNode(Point(499.99, 512.01), classes.OFFCURVE)
-        self.assertWritesValue(node, '"499.99 512.01 OFFCURVE"')
+        assert node.to_value() ==  '499.99 512.01 OFFCURVE'
 
         # Write userData with special characters
         test_user_data = {
@@ -1023,14 +1019,14 @@ rememberToDownloadARealRemindersApp = 1;}"',
             node.userData[key] = value
         # This is the output of Glyphs 1089
         expected_output = (
-            '"130 431 LINE {\\"\\012key\\\\"\';\\012\\012\\012\\" '
+            '130 431 LINE {\\"\\012key\\\\"\';\\012\\012\\012\\" '
             '= \\"\\\\"\'value\\012several lines\\012;\\012\\"'
             ';\\n\\";\\" = \\";\\012\\";\\n'
-            'escapeception = \\"\\\\\\\\"\\\\\'\\\\\\n\\\\\\\\\\n\\";}"'
+            'escapeception = \\"\\\\\\\\"\\\\\'\\\\\\n\\\\\\\\\\n\\";}'
         )
-        self.assertWritesValue(node, expected_output)
+        assert node.to_value() ==  expected_output
         # Check that we can read the userData back
-        node = Parser(classes.GSNode).parse(expected_output)
+        node = classes.GSNode.from_value(expected_output, formatVersion=2)
         self.assertEqual(test_user_data, dict(node.userData))
 
     def test_write_guideline(self):

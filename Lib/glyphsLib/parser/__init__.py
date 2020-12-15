@@ -53,6 +53,8 @@ class Parser:
         if text[i:].strip():
             self._fail("Unexpected trailing content", text, i)
         if self.current_type:
+            if isinstance(result, list):
+                return [ self.current_type.from_dict(x, formatVersion=self.formatVersion) for x in result ]
             return self.current_type.from_dict(result, formatVersion=self.formatVersion)
         return result
 
@@ -63,6 +65,26 @@ class Parser:
         result, i = self._parse(text, 0)
         res.__class__.from_dict(result, formatVersion=self.formatVersion, target=res)
         return i
+
+    def _guess_current_type(self, parsed, value):
+        if value.lower() in ("infinity", "inf", "nan"):
+            # Those values would be accepted by `float()`
+            # But `infinity` is a glyph name
+            return str
+        if parsed[-1] != '"':
+            try:
+                v = float(value)
+
+                def current_type(_):
+                    if v.is_integer():
+                        return int(v)
+                    return v
+
+            except ValueError:
+                current_type = str
+        else:
+            current_type = str
+        return current_type
 
     def _parse(self, text, i):
         """Recursive function to parse a single dictionary, list, or value."""
@@ -83,7 +105,7 @@ class Parser:
         if m:
             parsed = m.group(0)
             i += len(parsed)
-            value = str(self._trim_value(m.group(1)))
+            value = self._trim_value(m.group(1))
 
             return value, i
 
@@ -101,7 +123,7 @@ class Parser:
     def _parse_dict(self, text, i):
         """Parse a dictionary from source text starting at i."""
         end_match = self.end_dict_re.match(text, i)
-        python_dict = {}
+        python_dict = OrderedDict()
         while not end_match:
             m = self.attr_re.match(text, i)
             if not m:
